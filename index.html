@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Multimodal XNAT at CBH</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="How the Center for Brain and Health's MRI data moved from shared folders to a self-hosted XNAT platform, and a staging test that brings MEG recordings into it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;1,400&family=Roboto+Slab:wght@400;700&family=Inconsolata:wght@400;600&display=swap">
+<style>
+/* Layout: a deliberately light, Read-the-Docs-style manual page. Fixed dark sidebar with contents on desktop; on phones it becomes a collapsible bar above the page. Single theme by choice; every color is set explicitly. */
+:root {
+  color-scheme: light;
+  --side: #343131; --side-ink: #d9d9d9; --side-dim: #b3b3b3; --side-cap: #55a5d9; --side-cur: #fcfcfc;
+  --blue: #2980b9; --blue-hover: #3091d1; --visited: #9b59b6;
+  --ink: #404040; --muted: #6a6a6a; --paper: #fcfcfc; --page-edge: #edf0f2; --line: #e1e4e5; --stripe: #f3f6f6;
+  --note-h: #6ab0de; --note-b: #e7f2fa; --warn-h: #f0b37e; --warn-b: #ffedcc; --tip-h: #1abc9c; --tip-b: #dbfaf4;
+  --literal: #e74c3c;
+  --slab: "Roboto Slab", "ff-tisa-web-pro", Georgia, serif;
+  --lato: "Lato", "proxima-nova", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Inconsolata", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page-edge); color: var(--ink); font: 400 16px/24px var(--lato); }
+a { color: var(--blue); text-decoration: none; }
+a:hover { color: var(--blue-hover); text-decoration: underline; }
+a:visited { color: var(--visited); }
+a:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+img { max-width: 100%; height: auto; display: block; }
+
+/* Sidebar */
+.side { position: fixed; inset: 0 auto 0 0; width: 300px; background: var(--side); color: var(--side-ink); overflow-y: auto; padding-bottom: 2rem; padding-top: env(safe-area-inset-top, 0px); padding-left: env(safe-area-inset-left, 0px); }
+.side-head { background: var(--blue); text-align: center; padding: 1.1rem .9rem 1rem; color: #fcfcfc; }
+.side-head .proj { font: 700 1.25rem/1.3 var(--lato); color: #fcfcfc; display: block; }
+.side-head .proj:hover { text-decoration: none; }
+.side-head .ver { font-size: .85rem; color: rgba(255,255,255,.75); margin-top: .3rem; display: block; }
+.side-head .by { font-size: .8rem; color: rgba(255,255,255,.85); margin-top: .5rem; display: block; }
+.side .cap { font: 700 .82rem/1.2 var(--lato); color: var(--side-cap); text-transform: uppercase; letter-spacing: .02em; margin: 1.4rem 1.6rem .5rem; }
+.side ul { list-style: none; margin: 0; padding: 0; }
+.side li a { display: block; padding: .4rem 1.6rem; color: var(--side-ink); font-size: .9rem; line-height: 1.35; }
+.side li a:hover { background: #4e4a4a; text-decoration: none; color: #fff; }
+.side li.cur > a { background: var(--side-cur); color: var(--ink); font-weight: 700; border-right: 0; }
+.side li li a { padding-left: 2.6rem; font-size: .85rem; color: var(--side-dim); }
+.side li.cur li a { background: #e3e3e3; color: #404040; font-weight: 400; border-top: 1px solid #c9c9c9; }
+.side li.cur li a:hover { background: #d6d6d6; }
+.side .ext a { color: var(--side-dim); }
+
+/* Mobile top bar */
+.topbar { display: none; }
+
+/* Content */
+.content { margin-left: 300px; min-height: 100vh; background: var(--paper); }
+.doc { max-width: 860px; padding-block: 1.6rem 3rem; padding-left: max(16px, env(safe-area-inset-left, 0px), 3.2rem); padding-right: max(16px, env(safe-area-inset-right, 0px), 3.2rem); }
+.crumbs { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem 1rem; font-size: .9rem; padding-bottom: .6rem; border-bottom: 1px solid var(--line); margin-bottom: 1.6rem; }
+.crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .3rem; }
+.crumbs li + li::before { content: "»"; margin-right: .3rem; color: var(--muted); }
+h1, h2, h3 { font-family: var(--slab); font-weight: 700; color: var(--ink); text-wrap: balance; }
+h1 { font-size: 175%; line-height: 1.25; margin: 0 0 1.2rem; }
+h2 { font-size: 150%; line-height: 1.3; margin: 2.6rem 0 1rem; padding-top: .4rem; scroll-margin-top: 1rem; }
+h3 { font-size: 125%; line-height: 1.35; margin: 1.8rem 0 .7rem; }
+.hl { color: var(--muted); font-weight: 400; font-size: .7em; margin-left: .35rem; visibility: hidden; }
+h2:hover .hl, h3:hover .hl { visibility: visible; }
+p { margin: 0 0 1.1rem; }
+ul.list, ol.list { margin: 0 0 1.2rem; padding-left: 1.6rem; }
+ul.list li, ol.list li { margin: .3rem 0; }
+code { font: 600 .9em var(--mono); color: var(--literal); background: #fff; border: 1px solid var(--line); padding: 1px 5px; white-space: nowrap; }
+
+/* Admonitions */
+.adm { margin: 1.4rem 0; background: var(--note-b); }
+.adm .t { background: var(--note-h); color: #fff; font-weight: 700; padding: .35rem .8rem; display: flex; align-items: center; gap: .45rem; }
+.adm .t svg { width: 15px; height: 15px; flex: none; }
+.adm .b { padding: .6rem .8rem .7rem; }
+.adm .b p:last-child { margin-bottom: 0; }
+.adm.warn { background: var(--warn-b); } .adm.warn .t { background: var(--warn-h); }
+.adm.tip { background: var(--tip-b); } .adm.tip .t { background: var(--tip-h); }
+
+/* Tables (RTD wy-table) */
+.tbl { overflow-x: auto; margin: 0 0 1.6rem; }
+table { border-collapse: collapse; border: 1px solid var(--line); width: 100%; font-size: .93rem; line-height: 1.4; }
+th, td { border: 1px solid var(--line); padding: .5rem 1rem; text-align: left; vertical-align: top; min-width: 8rem; }
+th { font-weight: 700; background: #fff; }
+tbody tr:nth-child(odd) td { background: var(--stripe); }
+td.num, th.num { font-variant-numeric: tabular-nums; }
+caption { caption-side: top; text-align: left; font: italic .92rem var(--lato); color: var(--muted); padding-bottom: .4rem; }
+
+/* Stats as a definition table */
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); margin: 1.4rem 0 1.8rem; background: #fff; }
+.stats div { padding: .8rem 1rem; display: grid; gap: .15rem; align-content: start; min-width: 0; }
+.stats div + div { border-left: 1px solid var(--line); }
+.stats b { font: 700 1.45rem/1.15 var(--slab); font-variant-numeric: tabular-nums; }
+.stats span { font-size: .85rem; line-height: 1.35; color: var(--muted); }
+.stats .meg b { color: var(--blue); }
+
+/* Figures */
+figure { margin: 1.6rem 0 1.8rem; }
+.fig-frame { border: 1px solid var(--line); background: #fff; overflow-x: auto; }
+.fig-frame img { min-width: 680px; width: 100%; }
+.fig-frame.shot img { min-width: 0; }
+figcaption { font-size: .9rem; line-height: 1.45; color: var(--ink); margin-top: .55rem; }
+figcaption .n { font-weight: 700; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; margin: 1.6rem 0; }
+.pair figure { margin: 0; min-width: 0; }
+
+/* Footer buttons */
+.foot { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1.2rem; display: grid; gap: .6rem; font-size: .88rem; color: var(--muted); }
+.foot p { margin: 0; }
+.btn { display: inline-block; padding: .45rem .9rem; border: 1px solid rgba(0,0,0,.1); background: #f3f6f6; color: var(--ink) !important; font-size: .9rem; border-radius: 2px; box-shadow: inset 0 -2px 0 rgba(0,0,0,.08); }
+.btn:hover { background: #e5ebeb; text-decoration: none; }
+.contact { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
+
+@media (max-width: 900px) {
+  .side { display: none; }
+  .content { margin-left: 0; }
+  .topbar { display: block; background: var(--blue); color: #fff; padding-top: env(safe-area-inset-top, 0px); }
+  .topbar summary { list-style: none; cursor: pointer; padding: .8rem max(16px, env(safe-area-inset-right, 0px)) .8rem max(16px, env(safe-area-inset-left, 0px)); font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+  .topbar summary::-webkit-details-marker { display: none; }
+  .topbar summary span:last-child { font-weight: 400; font-size: .9rem; opacity: .9; }
+  .topbar nav { background: var(--side); padding: .4rem 0 .8rem; }
+  .topbar nav a { display: block; color: var(--side-ink); padding: .45rem max(16px, env(safe-area-inset-left, 0px)); font-size: .95rem; }
+  .doc { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .pair { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<aside class="side" aria-label="Site navigation">
+  <div class="side-head">
+    <a class="proj" href="#top">Multimodal XNAT at CBH</a>
+    <span class="ver">case study · November 2026</span>
+    <span class="by">Soumen Mohanty</span>
+  </div>
+  <p class="cap">Contents</p>
+  <ul>
+    <li class="cur"><a href="#top">Overview</a></li>
+    <li><a href="#mri">1. The MRI platform</a>
+      <ul><li><a href="#mri-get">What researchers get</a></li><li><a href="#mri-arch">Architecture</a></li><li><a href="#mri-changed">What I contributed to</a></li></ul>
+    </li>
+    <li><a href="#meg">2. Time-series test: adding MEG</a>
+      <ul><li><a href="#meg-path">How a recording moves</a></li><li><a href="#meg-results">What it showed</a></li><li><a href="#meg-status">Status</a></li></ul>
+    </li>
+    <li><a href="#carries-over">3. What carries over</a></li>
+    <li><a href="#links">4. Links</a></li>
+  </ul>
+  <p class="cap">Elsewhere</p>
+  <ul class="ext">
+    <li><a href="https://xnat-nyuad.readthedocs.io/en/latest/" target="_blank" rel="noopener">NYUAD XNAT user manual</a></li>
+    <li><a href="https://neurowaves.science/" target="_blank" rel="noopener">NeuroWaves MEG lab docs</a></li>
+    <li><a href="https://www.linkedin.com/in/soumen02/" target="_blank" rel="noopener">LinkedIn · Soumen Mohanty</a></li>
+  </ul>
+</aside>
+
+<div class="content">
+  <details class="topbar">
+    <summary><span>Multimodal XNAT at CBH</span><span>Contents ▾</span></summary>
+    <nav aria-label="Contents">
+      <a href="#top">Overview</a>
+      <a href="#mri">1. The MRI platform</a>
+      <a href="#meg">2. Time-series test: adding MEG</a>
+      <a href="#carries-over">3. What carries over</a>
+      <a href="#links">4. Links</a>
+    </nav>
+  </details>
+
+  <main class="doc" id="top">
+    <div class="crumbs">
+      <ol><li><a href="#top">Docs</a></li><li>Multimodal XNAT at CBH</li></ol>
+      <a href="https://xnat-nyuad.readthedocs.io/en/latest/" target="_blank" rel="noopener">View the XNAT user manual</a>
+    </div>
+
+    <h1>Making the Center for Brain and Health's data platform multimodal</h1>
+    <p>XNAT is the open-source data platform behind NYU Abu Dhabi's <a href="https://nyuad.nyu.edu/en/research/faculty-labs-and-projects/center-for-brain-and-health.html" target="_blank" rel="noopener">Center for Brain and Health</a> (CBH). Data from the Center's MRI scanner is stored, organised and processed there, all the way to analysis-ready BIDS, and I run it. This page shows how the center got here, and a working test that brings MEG recordings into the same platform: the step from images to neural time series.</p>
+
+    <div class="stats">
+      <div><b>2,500+</b><span>imaging sessions</span></div>
+      <div><b>50+</b><span>research projects</span></div>
+      <div><b>11 VMs</b><span>manager, database, 8 Swarm workers, staging</span></div>
+    </div>
+
+    <figure>
+      <div class="fig-frame"><img src="assets/evolution.svg" width="900" height="170" alt="Four stages: shared NFS folders, then Flywheel, then XNAT today, then XNAT plus MEG as a staging test."></div>
+      <figcaption><span class="n">Figure 1.</span> Four stages of how the center has handled its imaging data. Each one moved work off researchers and onto the platform.</figcaption>
+    </figure>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Stage</th><th>What researchers had</th><th>What was missing</th></tr></thead>
+        <tbody>
+          <tr><td><b>Shared NFS folders</b><br>(about four years ago)</td><td>DICOMs dropped into per-lab folders, plus one folder that converted DICOM to NIfTI</td><td>Everything else: downloading, organising, moving to the HPC, processing</td></tr>
+          <tr><td><b>Flywheel</b><br>(about a year, then discontinued)</td><td>A locally hosted, vendor-licensed platform with a good interface, access control and simple pipelines</td><td>Room to customise. We needed a BIDS workflow and lab-specific features that we couldn't build ourselves on a closed platform</td></tr>
+          <tr><td><b>XNAT</b> (today)</td><td>Self-hosted and open source: role-based access, archiving, backups, pipelines, HPC integration, and the freedom to build whatever a lab needs, BIDS included</td><td>Only MRI. Other modalities still live outside it</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="mri">1. The MRI platform<a class="hl" href="#mri" aria-label="Link to this section">¶</a></h2>
+    <p>When I joined, XNAT was being set up and tested, and it didn't really work yet. Getting it to something every lab can depend on has been my main job since: ingestion, access, pipelines, reliability, docs and training.</p>
+
+    <h3 id="mri-get">What researchers get<a class="hl" href="#mri-get" aria-label="Link to this section">¶</a></h3>
+    <ul class="list">
+      <li>Scans arrive from the scanner directly, organised by project, subject and session, behind university sign-on.</li>
+      <li>BIDS data stored inside XNAT, so getting analysis-ready data takes two steps instead of seven.</li>
+      <li>Pipelines from the browser (dcm2niix, dcm2bids, MRIQC, fMRIPrep, FreeSurfer, TractoFlow), on one session or many, with heavy jobs sent to the HPC.</li>
+      <li>Downloads by browser, desktop client, Python or MATLAB, all covered in the <a href="https://xnat-nyuad.readthedocs.io/en/latest/" target="_blank" rel="noopener">public user manual</a>.</li>
+      <li>Workshops, one-to-one training and office hours.</li>
+    </ul>
+
+    <h3 id="mri-arch">Architecture<a class="hl" href="#mri-arch" aria-label="Link to this section">¶</a></h3>
+    <figure>
+      <div class="fig-frame"><img src="assets/architecture.svg" width="900" height="430" alt="Architecture: MRI scanner and a partner university feed the XNAT platform of 11 VMs (manager, database, 8 Swarm workers, staging). Workers use the university HPC, a network file store and a private image registry. Researchers use browser, desktop client, Python or MATLAB."></div>
+      <figcaption><span class="n">Figure 2.</span> The production platform. Pipelines run as containers on the eight worker machines (XNAT's Container Service on Docker Swarm). Hostnames and security details are left out.</figcaption>
+    </figure>
+
+    <h3 id="mri-changed">What I contributed to<a class="hl" href="#mri-changed" aria-label="Link to this section">¶</a></h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Area</th><th>My contribution</th></tr></thead>
+        <tbody>
+          <tr><td>Workflow first</td><td>Followed five researchers' real workflows, then dropped a planned one-size-fits-all CLI for Python templates on XNAT's API and the stock desktop client</td></tr>
+          <tr><td>BIDS</td><td>Replaced a chain of tools, mappings and HPC copies with a BIDS tree stored inside XNAT. Seven steps became two</td></tr>
+          <tr><td>Pipelines</td><td>Code in GitHub with docs, one private image registry for all workers, and fixed Slurm scripts, so every lab runs the same tested pipeline the same way, on the HPC when it needs to</td></tr>
+          <tr><td>Reliability</td><td>Verified backups, monitoring and recovery runbooks, so the platform just runs and researchers can stop worrying about it</td></tr>
+          <tr><td>Network</td><td>Worked with central IT for months to restore every upload and download path, then enabled the desktop client</td></tr>
+          <tr><td>Second site</td><td>A partner university's new scanner drops zipped scans in a shared folder, and a nightly service validates and archives them with no manual steps</td></tr>
+          <tr><td>Quality checks</td><td>Validation for a national normative brain-imaging cohort, with a nightly dashboard research assistants use to fix issues</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="meg">2. Time-series test: adding MEG<a class="hl" href="#meg" aria-label="Link to this section">¶</a></h2>
+    <p>The center's MEG lab, <a href="https://neurowaves.science/" target="_blank" rel="noopener">NeuroWaves</a>, keeps its recordings outside the platform. They are copied from the acquisition PC to NYU Box by hand. To see whether the MRI engineering carries over to time-series data, I archived and processed one real KIT recording (3 runs, 256 channels, 1 kHz) on a separate test copy of our XNAT.</p>
+
+    <h3 id="meg-path">How a recording moves<a class="hl" href="#meg-path" aria-label="Link to this section">¶</a></h3>
+    <figure>
+      <div class="fig-frame"><img src="assets/meg-path.svg" width="900" height="360" alt="MEG lab export is inspected and hashed, imported through the XNAT REST API into a native MEG session with three scans, and processed by Container Service on Swarm: one KIT to FIF job per scan and one QC job per session. A dashed path shows researcher-reviewed results returning later (planned)."></div>
+      <figcaption><span class="n">Figure 3.</span> Originals are archived first and never changed. Processing runs on copies, and every result is written back next to its source, the same rule the MRI side follows.</figcaption>
+    </figure>
+
+    <h3 id="meg-results">What it showed<a class="hl" href="#meg-results" aria-label="Link to this section">¶</a></h3>
+    <ol class="list">
+      <li><b>Intake that proves itself.</b> XNAT already supports MEG sessions; they just had to be switched on. All 23 files were checksum-verified where XNAT stored them, and re-running the import changed nothing.</li>
+      <li><b>The metadata was wrong.</b> The sidecar said 1 s, 275 + 23 channels and 3 events per run. The recordings ran 399–467 s, with 256 channels and 150 trigger pulses each. I kept the originals and recorded the differences.</li>
+      <li><b>Conversion per scan, like dcm2niix.</b> Tick scans, and XNAT launches one KIT → FIF job each. The worker reopens the FIF and compares every sample with MNE's reading of the original: 328,704,000 values matched exactly.</li>
+      <li><b>QC in the browser.</b> A session report of signals, spectra, triggers and metadata checks. Reruns are identical, and a failed run leaves the last good report in place.</li>
+    </ol>
+
+    <div class="pair">
+      <figure>
+        <div class="fig-frame shot"><img src="assets/xnat-bulk-launch.jpg" width="1280" height="720" alt="XNAT launch form with three MEG scans selected to convert in bulk." loading="lazy"></div>
+        <figcaption><span class="n">Figure 4.</span> Three scans, one form, three jobs.</figcaption>
+      </figure>
+      <figure>
+        <div class="fig-frame shot"><img src="assets/xnat-jobs-queued.jpg" width="1280" height="720" alt="XNAT confirming three conversion containers queued, one per scan." loading="lazy"></div>
+        <figcaption><span class="n">Figure 5.</span> Each scan gets its own job, log and result.</figcaption>
+      </figure>
+    </div>
+
+    <div class="pair">
+      <figure>
+        <div class="fig-frame shot"><img src="assets/fif-receipt.jpg" width="1000" height="1000" alt="Conversion receipt for recording 1: signal read-back passed; 256 channels, 399,000 samples, 1000 Hz in both files." loading="lazy"></div>
+        <figcaption><span class="n">Figure 6.</span> Each run gets a conversion report that says what was compared, and what was not assessed.</figcaption>
+      </figure>
+      <figure>
+        <div class="fig-frame shot"><img src="assets/qc-report.jpg" width="1200" height="1240" alt="The MEG QC report: 3 recordings, 21.4 minutes, 450 hardware pulses; report generated, scientific review pending." loading="lazy"></div>
+        <figcaption><span class="n">Figure 7.</span> The QC report keeps "ran correctly" separate from "reviewed".</figcaption>
+      </figure>
+    </div>
+
+    <div class="adm">
+      <div class="t"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M8 7 V11.5 M8 4.6 V5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>Note</div>
+      <div class="b"><p>The lab's MEG scientist pointed out that there is no single correct KIT-to-FIF conversion, and that steps like head alignment, bad-channel and ICA review need a researcher in a desktop GUI. So the conversion here is signal-only on purpose. In the planned design, researchers keep their own tools and their reviewed results come back to XNAT as clearly labelled external results, saved against the exact inputs they were made from.</p></div>
+    </div>
+
+    <h3 id="meg-status">Status<a class="hl" href="#meg-status" aria-label="Link to this section">¶</a></h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Built and verified</th><th>Designed, not built</th><th>Not attempted</th></tr></thead>
+        <tbody>
+          <tr><td>Native MEG sessions in XNAT</td><td>Drop folder + "ready" manifest + watcher</td><td>Head-geometry review, source analysis</td></tr>
+          <tr><td>Hash-verified, safe-to-rerun intake</td><td>Researcher results returned to XNAT</td><td>Task-averaged responses</td></tr>
+          <tr><td>Per-scan KIT → FIF with full read-back</td><td>BIDS export as its own resource</td><td>Live or real-time acquisition</td></tr>
+          <tr><td>Session QC report, job history and logs</td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="carries-over">3. What carries over<a class="hl" href="#carries-over" aria-label="Link to this section">¶</a></h2>
+    <p>EEG, intracranial EEG, single units, TMS and electrical stimulation share the problems this test was about: continuous recordings, events to verify, metadata in separate files, and decisions only a scientist can make.</p>
+    <ul class="list">
+      <li><b>One backbone for many modalities.</b> Explicit completion signals, identity from hashes, originals untouched, and BIDS (including iEEG-BIDS and NIBS-BIDS) as validated outputs.</li>
+      <li><b>Every result traceable.</b> Inputs, code and container image recorded for each output; failures never overwrite the last good result.</li>
+      <li><b>Human review as data.</b> Decisions saved against exact inputs, so a pipeline can stop when one is missing or stale.</li>
+      <li><b>Privacy by design.</b> Clinical recordings carry identifiers in headers, filenames and head shapes, and renaming a file isn't de-identification.</li>
+      <li><b>Software others can run.</b> Tests, containers, CI and documentation, plus the training that gets people to use it.</li>
+    </ul>
+    <div class="adm tip">
+      <div class="t"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 L6.5 12 L13 4.5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>How this was built</div>
+      <div class="b"><p>When I first joined, it took me about a month to configure XNAT properly and to learn how to debug it and trace issues through the system. With AI coding agents I can now do that kind of setup in a few days, which is how this MEG test came together. The part that still takes time is understanding the system and how people use it. New to me so far: EEG and iEEG acquisition, real-time closed-loop systems and stimulation hardware.</p></div>
+    </div>
+
+    <h2 id="links">4. Links<a class="hl" href="#links" aria-label="Link to this section">¶</a></h2>
+    <div class="tbl">
+      <table>
+        <tbody>
+          <tr><td><a href="https://xnat-nyuad.readthedocs.io/en/latest/" target="_blank" rel="noopener">NYUAD XNAT user manual</a></td><td>What researchers use day to day: upload, BIDS, pipelines, downloads</td></tr>
+          <tr><td><a href="https://github.com/BioMedicalImaging-Core-NYUAD/xnat-docs" target="_blank" rel="noopener">Manual source (GitHub)</a></td><td>Sphinx source and the nightly cohort validation dashboard</td></tr>
+          <tr><td><a href="https://neurowaves.science/" target="_blank" rel="noopener">NeuroWaves MEG lab docs</a></td><td>The KIT and OPM systems, protocols, data storage</td></tr>
+          <tr><td><a href="https://neurowaves.science/6-meg-pipeline-gallery/2-meg-pipeline-gallery.html" target="_blank" rel="noopener">NeuroWaves pipeline gallery</a></td><td>The lab's KIT processing stages the MEG test was checked against</td></tr>
+          <tr><td><a href="https://nyuad.nyu.edu/en/research/faculty-labs-and-projects/center-for-brain-and-health.html" target="_blank" rel="noopener">Center for Brain and Health</a></td><td>The research center behind the platform</td></tr>
+          <tr><td><a href="https://sites.nyuad.nyu.edu/rokersvisionlaboratory/" target="_blank" rel="noopener">Rokers Vision Laboratory</a></td><td>A CBH lab whose MRI data runs through the platform</td></tr>
+          <tr><td><a href="https://sites.nyuad.nyu.edu/faculty/sreenivasan/" target="_blank" rel="noopener">Sreenivasan Lab</a></td><td>Another CBH lab working with the platform</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="foot">
+      <div><a class="btn" href="#top">↑ Back to top</a></div>
+      <div class="contact"><span>Soumen Mohanty</span><a href="mailto:sm8966@nyu.edu">sm8966@nyu.edu</a><a href="https://www.linkedin.com/in/soumen02/" target="_blank" rel="noopener">LinkedIn</a><a href="https://github.com/soumen02" target="_blank" rel="noopener">GitHub</a></div>
+      <p>© 2026 Soumen Mohanty. Diagrams drawn in a draw.io style; screenshots from an isolated staging server.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+// Highlight the sidebar entry for the section in view.
+(() => {
+  const items = [...document.querySelectorAll('.side > ul > li')];
+  const map = new Map(items.map(li => [li.querySelector('a').getAttribute('href').slice(1), li]));
+  if (!('IntersectionObserver' in window)) return;
+  const io = new IntersectionObserver(es => {
+    for (const e of es) if (e.isIntersecting) {
+      const li = map.get(e.target.id);
+      if (li) { items.forEach(x => x.classList.remove('cur')); li.classList.add('cur'); }
+    }
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  ['top', 'mri', 'meg', 'carries-over', 'links'].forEach(id => { const el = document.getElementById(id); if (el) io.observe(el); });
+  document.querySelectorAll('.topbar nav a').forEach(a => a.addEventListener('click', () => a.closest('details').open = false));
+})();
+</script>
+</body>
+</html>
